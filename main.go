@@ -52,30 +52,19 @@ func main() {
 var commiterReg = regexp.MustCompile(`^committer .*? (\d+) (?:[-+]\d+)$`)
 
 func skipLocalModified(files []string) ([]string, error) {
-	cmd := exec.Command("git", "ls-files", "--modified", "-z")
-	out, err := cmd.StdoutPipe()
+	out, err := exec.Command("git", "ls-files", "--modified", "-z").Output()
 	if err != nil {
 		return files, err
 	}
-	defer out.Close()
-	if err := cmd.Start(); err != nil {
-		return files, err
-	}
 
-	rdr := bufio.NewReader(out)
-	excludes := make(map[string]bool)
-
-	for f := ""; err == nil; f, err = rdr.ReadString('\x00') {
-		excludes[strings.TrimSuffix(f, "\x00")] = true
-	}
-	if err != io.EOF {
-		return files, err
-	}
-	if err := cmd.Wait(); err != nil {
-		return files, err
-	}
-	if len(excludes) == 0 {
+	modifiedFiles := strings.Split(strings.TrimRight(string(out), "\x00"), "\x00")
+	if len(modifiedFiles) == 0 {
 		return files, nil
+	}
+
+	excludes := make(map[string]bool, len(modifiedFiles))
+	for _, f := range modifiedFiles {
+		excludes[f] = true
 	}
 
 	newFiles := make([]string, 0, len(files))
