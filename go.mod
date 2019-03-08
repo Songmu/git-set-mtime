@@ -1,1 +1,1 @@
-module github.com/songmu/git-set-mtime
+module github.com/Songmu/git-set-mtime
