@@ -8,7 +8,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -52,43 +51,40 @@ func main() {
 
 var commiterReg = regexp.MustCompile(`^committer .*? (\d+) (?:[-+]\d+)$`)
 
-func skipLocalModified(files []string) []string {
-	cmd := exec.Command("git", "status", "-s", ".")
+func skipLocalModified(files []string) ([]string, error) {
+	cmd := exec.Command("git", "ls-files", "--modified", "-z")
 	out, err := cmd.StdoutPipe()
 	if err != nil {
-		return files
+		return files, err
 	}
-	cmd.Start()
+	defer out.Close()
+	if err := cmd.Start(); err != nil {
+		return files, err
+	}
 
-	scanner := bufio.NewScanner(out)
-	excludes := make([]string, 0, len(files))
-	for scanner.Scan() {
-		words := strings.Split(scanner.Text(), " ")
-		if len(words) == 0 {
-			continue
+	rdr := bufio.NewReader(out)
+	excludes := make(map[string]bool)
+
+	for f := ""; err == nil; f, err = rdr.ReadString('\x00') {
+		excludes[strings.TrimSuffix(f, "\x00")] = true
+	}
+	if err != io.EOF {
+		return files, err
+	}
+	if err := cmd.Wait(); err != nil {
+		return files, err
+	}
+	if len(excludes) == 0 {
+		return files, nil
+	}
+
+	newFiles := make([]string, 0, len(files))
+	for _, file := range files {
+		if !excludes[file] {
+			newFiles = append(newFiles, file)
 		}
-		excludes = append(excludes, words[len(words)-1])
 	}
-	cmd.Wait()
-	sort.Slice(excludes, func(i, j int) bool { return excludes[i] < excludes[j] })
-
-	skipList := make([]int, 0, len(files))
-	skipCnt := 0
-
-	for j, file := range files {
-		idx := sort.Search(len(excludes), func(i int) bool { return excludes[i] >= file })
-		if idx < len(excludes) && excludes[idx] == file {
-			skipList = append(skipList, j)
-			skipCnt++
-		}
-	}
-
-	for j := len(skipList) - 1; j > 0; j-- {
-		i := skipList[j]
-		files = append(files[:i-1], files[i+1:]...)
-	}
-
-	return files
+	return newFiles, nil
 }
 
 func run(args []string) error {
@@ -102,7 +98,10 @@ func run(args []string) error {
 		return err
 	}
 
-	files := skipLocalModified(strings.Split(strings.TrimRight(string(out), "\x00"), "\x00"))
+	files, err := skipLocalModified(strings.Split(strings.TrimRight(string(out), "\x00"), "\x00"))
+	if err != nil {
+		return err
+	}
 	gitlogCmd := exec.Command(
 		"git", "log", "-m", "-r", "--name-only", "--no-color", "--pretty=raw", "-z")
 	pipe, err := gitlogCmd.StdoutPipe()
