@@ -51,6 +51,31 @@ func main() {
 
 var commiterReg = regexp.MustCompile(`^committer .*? (\d+) (?:[-+]\d+)$`)
 
+func skipLocalModified(files []string) ([]string, error) {
+	out, err := exec.Command("git", "ls-files", "--modified", "-z").Output()
+	if err != nil {
+		return files, err
+	}
+
+	modifiedFiles := strings.Split(strings.TrimRight(string(out), "\x00"), "\x00")
+	if len(modifiedFiles) == 0 {
+		return files, nil
+	}
+
+	excludes := make(map[string]bool, len(modifiedFiles))
+	for _, f := range modifiedFiles {
+		excludes[f] = true
+	}
+
+	newFiles := make([]string, 0, len(files))
+	for _, file := range files {
+		if !excludes[file] {
+			newFiles = append(newFiles, file)
+		}
+	}
+	return newFiles, nil
+}
+
 func run(args []string) error {
 	if len(args) > 0 {
 		fmt.Fprintln(os.Stderr, help())
@@ -61,7 +86,11 @@ func run(args []string) error {
 	if err != nil {
 		return err
 	}
-	files := strings.Split(strings.TrimRight(string(out), "\x00"), "\x00")
+
+	files, err := skipLocalModified(strings.Split(strings.TrimRight(string(out), "\x00"), "\x00"))
+	if err != nil {
+		return err
+	}
 	gitlogCmd := exec.Command(
 		"git", "log", "-m", "-r", "--name-only", "--no-color", "--pretty=raw", "-z")
 	pipe, err := gitlogCmd.StdoutPipe()
