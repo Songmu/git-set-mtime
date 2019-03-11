@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.3.0](https://github.com/Songmu/git-set-mtime/compare/v0.2.0...v0.3.0) (2019-03-11)
+
+* adjust #11 [#12](https://github.com/Songmu/git-set-mtime/pull/12) ([Songmu](https://github.com/Songmu))
+
 ## [v0.2.0](https://github.com/Songmu/git-set-mtime/compare/v0.1.2...v0.2.0) (2019-02-25)
 
 * introduce go modules and godzil [#10](https://github.com/Songmu/git-set-mtime/pull/10) ([Songmu](https://github.com/Songmu))
